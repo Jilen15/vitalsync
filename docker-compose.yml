@@ -1,0 +1,42 @@
+name: vitalsync
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: db
+    environment:
+      ENV_NAME: ${ENV_NAME}
+      POSTGRES_DB: ${DB_NAME}_${ENV_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.${ENV_NAME}.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        - ENV_NAME=${ENV_NAME}
+    container_name: backend
+    image: backend:dev
+    environment:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}_${ENV_NAME}
+    depends_on:
+      - db
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - ENV_NAME=${ENV_NAME}
+    container_name: frontend
+    image: frontend:dev
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  db_data:
