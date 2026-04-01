@@ -1,0 +1,47 @@
+# .dockerignore pour le backend VitalSync
+# Ce fichier exclut les fichiers inutiles du contexte de build Docker,
+# réduisant ainsi le temps de transfert et la taille du contexte, tout en améliorant la sécurité
+# en évitant de copier des fichiers sensibles ou non nécessaires dans l'image.
+
+# Dépôt Git
+.git
+.gitignore
+
+# Fichiers de documentation
+README.md
+*.md
+
+# Fichiers d'environnement (déjà gérés par .gitignore, mais pour double sécurité)
+.env
+.env.local
+.env.*
+
+# Logs et fichiers temporaires
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Répertoires de couverture de tests (générés lors des tests)
+coverage/
+.nyc_output/
+
+# Cache npm/yarn
+.npm
+.yarn-integrity
+
+# Fichiers de l'IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Dockerfiles et configurations non nécessaires
+Dockerfile*
+docker-compose*.yml
+.dockerignore
