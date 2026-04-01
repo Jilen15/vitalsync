@@ -1,0 +1,106 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm ci
+    - name: Run ESLint
+      run: |
+        cd backend
+        npm run lint
+    - name: Run tests
+      run: |
+        cd backend
+        npm test
+
+  build-docker:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v2
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    - name: Extract metadata for backend
+      id: meta-backend
+      uses: docker/metadata-action@v4
+      with:
+        images: ghcr.io/${{ github.repository }}/backend
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+    - name: Build and push backend image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./backend
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+    - name: Extract metadata for frontend
+      id: meta-frontend
+      uses: docker/metadata-action@v4
+      with:
+        images: ghcr.io/${{ github.repository }}/frontend
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+    - name: Build and push frontend image
+      uses: docker/build-push-action@v4
+      with:
+        context: ./frontend
+        push: true
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
+
+  deploy-staging:
+    needs: build-docker
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Update docker-compose images
+      run: |
+        sed -i 's|build: ./backend|image: ghcr.io/${{ github.repository }}/backend:main|' docker-compose.yml
+        sed -i 's|build: ./frontend|image: ghcr.io/${{ github.repository }}/frontend:main|' docker-compose.yml
+    - name: Start services with docker-compose
+      run: docker-compose up -d
+    - name: Wait for services to be ready
+      run: sleep 30
+    - name: Health check backend
+      run: |
+        for i in {1..10}; do
+          if curl -f http://localhost:3000/health; then
+            echo "Health check passed"
+            break
+          else
+            echo "Health check failed, retrying in 5 seconds..."
+            sleep 5
+          fi
+        done
+        if [ $i -eq 10 ]; then
+          echo "Health check failed after 10 attempts"
+          exit 1
+        fi
+    - name: Stop services
+      run: docker-compose down
